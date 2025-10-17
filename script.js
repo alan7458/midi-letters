@@ -1,17 +1,13 @@
-// fancy type
+// hunk of junk
 const baseNote = 36;
 const PATTERN_HEIGHT = 8;
-const SYMBOL_WIDTH = 8; // useless POS
+const SYMBOL_WIDTH = 8;
 const ROW_DELAY_MS = 60;
 const WORD_DELAY_MS = 400;
 
+let PATTERNS = {};
 let isPlaying = false;
 
-/**
- * futurer futurer me, this hunka junk "creates a single, concatenated pattern array" -w3
- * @param {string[]} symbols
- * @returns {number[][]}
- */
 function createWordPattern(symbols) {
   const wordPattern = [];
   for (let r = 0; r < PATTERN_HEIGHT; r++) {
@@ -25,11 +21,6 @@ function createWordPattern(symbols) {
   return wordPattern;
 }
 
-/**
- * row by row by row by row by row by row 
- * @param {number[][]} pattern
- * @param {MIDIAccessOutput} output
- */
 async function playWordBlock(pattern, output) {
   const currentWidth = pattern[0].length;
   const currentNoteMap = Array.from({ length: currentWidth }, (_, i) => baseNote + i);
@@ -39,7 +30,6 @@ async function playWordBlock(pattern, output) {
   }
 
   for (const row of pattern) {
-    // on
     for (let i = 0; i < currentWidth; i++) {
       if (row[i] === 1 && i < 88) {
         output.send([0x90, currentNoteMap[i], 0x7f]);
@@ -56,10 +46,6 @@ async function playWordBlock(pattern, output) {
   }
 }
 
-/**
- * process it yooooo
- * @param {string} message - to future me: this is the input message
- */
 async function playMessageWordByWord(message) {
   if (isPlaying) return;
   isPlaying = true;
@@ -94,7 +80,7 @@ async function playMessageWordByWord(message) {
     .filter(block => block.length > 0);
 
   for (let i = 0; i < blocks.length; i++) {
-    const word = blocks[i];n
+    const word = blocks[i];
     const validChars = Array.from(word).filter(char => PATTERNS[char]);
 
     if (validChars.length > 0) {
@@ -113,7 +99,28 @@ async function playMessageWordByWord(message) {
   isPlaying = false;
 }
 
-function setupUI() {
+async function setupUI() {
+  const statusElement = document.getElementById('status-message');
+  statusElement.textContent = "Loading patterns data...";
+
+  try {
+    const response = await fetch('patterns.json');
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data = await response.json();
+    
+    // Assign the PATTERNS object from the loaded JSON data
+    PATTERNS = data.PATTERNS;
+
+    statusElement.textContent = "Data loaded. Ready to play!";
+    setTimeout(() => { statusElement.textContent = ""; }, 2000);
+
+  } catch (e) {
+    statusElement.textContent = `Error loading patterns: ${e.message}. Cannot run.`;
+    return;
+  }
+  
   const inputElement = document.getElementById('message-input');
   const playButton = document.getElementById('play-button');
   

@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MIDI Word Player</title>
+</head>
+<body>
+
+    <div id="draggable-container" class="bg-white p-6 rounded-xl border border-gray-200">
+        <h1 class="text-2xl font-bold text-gray-800 mb-4 text-center">MIDI Word Player</h1>
+        <p class="text-sm text-gray-500 mb-4 text-center">
+            Type a message (letters A-Z, !, ?, .) and press Enter.
+        </p>
+        <div class="flex space-x-3">
+            <input type="text" id="message-input" placeholder="Type your message here" 
+                   class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-150">
+            <button id="play-button" 
+                    class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition duration-200 ease-in-out transform hover:scale-[1.02]">
+                Enter
+            </button>
+        </div>
+        <p id="status-message" class="text-center text-sm mt-3 h-5"></p>
+    </div>
+
+    <div class="info-box text-xs text-gray-600">
+        <p>Note: This requires a MIDI-enabled browser and a virtual MIDI loopback device (like loopMIDI or a synthesizer app) to hear audio.</p>
+    </div>
+
+    <script>
+        const baseNote = 36;
+        const PATTERN_HEIGHT = 8;
+        const SYMBOL_WIDTH = 8;
+        const ROW_DELAY_MS = 60;
+        const WORD_DELAY_MS = 800;
+
+        const PATTERNS = {
+          'A': [
+            [0,1,1,1,1,0,0,0], [1,0,0,0,0,1,0,0], [1,0,0,0,0,1,0,0], [1,1,1,1,1,1,0,0],
+            [1,0,0,0,0,1,0,0], [1,0,0,0,0,1,0,0], [1,0,0,0,0,1,0,0], [0,0,0,0,0,0,0,0]
+          ],
+          'B': [
+            [1,1,1,1,0,0,0,0], [1,0,0,0,1,0,0,0], [1,0,0,0,1,0,0,0], [1,1,1,1,0,0,0,0],
+            [1,0,0,0,1,0,0,0], [1,0,0,0,1,0,0,0], [1,1,1,1,0,0,0,0], [0,0,0,0,0,0,0,0]
+          ],
+          'C': [
+            [0,1,1,1,1,0,0,0], [1,0,0,0,0,1,0,0], [1,0,0,0,0,0,0,0], [1,0,0,0,0,0,0,0],
+            [1,0,0,0,0,0,0,0], [1,0,0,0,0,1,0,0], [0,1,1,1,1,0,0,0], [0,0,0,0,0,0,0,0]
+          ],
+          'D': [
+            [1,1,1,0,0,0,0,0], [1,0,0,1,0,0,0,0], [1,0,0,0,1,0,0,0], [1,0,0,0,1,0,0,0],
+            [1,0,0,0,1,0,0,0], [1,0,0,1,0,0,0,0], [1,1,1,0,0,0,0,0], [0,0,0,0,0,0,0,0]
+          ],
+          'E': [
+            [1,1,1,1,1,0,0,0], [1,0,0,0,0,0,0,0], [1,0,0,0,0,0,0,0], [1,1,1,1,0,0,0,0],
+            [1,0,0,0,0,0,0,0], [1,0,0,0,0,0,0,0], [1,1,1,1,1,0,0,0], [0,0,0,0,0,0,0,0]
+          ],
+          'F': [
+            [1,1,1,1,1,0,0,0], [1,0,0,0,0,0,0,0], [1,0,0,0,0,0,0,0], [1,1,1,1,0,0,0,0],
+            [1,0,0,0,0,0,0,0], [1,0,0,0,0,0,0,0], [1,0,0,0,0,0,0,0], [0,0,0,0,0,0,0,0]
+          ],
+          'G': [
+            [0,1,1,1,1,0,0,0], [1,0,0,0,0,0,0,0], [1,0,0,0,0,0,0,0], [1,0,0,1,1,1,0,0],
+            [1,0,0,0,0,1,0,0], [1,0,0,0,0,1,0,0], [0,1,1,1,1,0,0,0], [0,0,0,0,0,0,0,0]
+          ],
+          'H': [
+            [1,0,0,0,0,1,0,0], [1,0,0,0,0,1,0,0], [1,0,0,0,0,1,0,0], [1,1,1,1,1,1,0,0],
+            [1,0,0,0,0,1,0,0], [1,0,0,0,0,1,0,0], [1,0,0,0,0,1,0,0], [0,0,0,0,0,0,0,0]
+          ],
+          'I': [
+            [1,1,1,1,1,0,0,0], [0,0,1,0,0,0,0,0], [0,0,1,0,0,0,0,0], [0,0,1,0,0,0,0,0],
+            [0,0,1,0,0,0,0,0], [0,0,1,0,0,0,0,0], [1,1,1,1,1,0,0,0], [0,0,0,0,0,0,0,0]
+          ],
+          'J': [
+            [0,0,0,1,1,1,0,0], [0,0,0,0,1,0,0,0], [0,0,0,0,1,0,0,0], [0,0,0,0,1,0,0,0],
+            [1,0,0,0,1,0,0,0], [1,0,0,0,1,0,0,0], [0,1,1,1,0,0,0,0], [0,0,0,0,0,0,0,0]
+          ],
+          'K': [
+            [1,0,0,0,1,0,0,0], [1,0,0,1,0,0,0,0], [1,1,1,0,0,0,0,0], [1,0,1,0,0,0,0,0],
+            [1,0,0,1,0,0,0,0], [1,0,0,0,1,0,0,0], [1,0,0,0,0,1,0,0], [0,0,0,0,0,0,0,0]
+          ],
+          'L': [
+            [1,0,0,0,0,0,0,0], [1,0,0,0,0,0,0,0], [1,0,0,0,0,0,0,0], [1,0,0,0,0,0,0,0],
+            [1,0,0,0,0,0,0,0], [1,0,0,0,0,0,0,0], [1,1,1,1,1,0,0,0], [0,0,0,0,0,0,0,0]
+          ],
+          'M': [
+            [1,1,0,1,1,0,0,0], [1,0,1,0,1,0,0,0], [1,0,1,0,1,0,0,0], [1,0,0,0,1,0,0,0],
+            [1,0,0,0,1,0,0,0], [1,0,0,0,1,0,0,0], [1,0,0,0,1,0,0,0], [0,0,0,0,0,0,0,0]
+          ],
+          'N': [
+            [1,1,0,0,1,0,0,0], [1,0,1,0,1,0,0,0], [1,0,0,1,1,0,0,0], [1,0,0,0,1,0,0,0],
+            [1,0,0,0,1,0,0,0], [1,0,0,0,1,0,0,0], [1,0,0,0,1,0,0,0], [0,0,0,0,0,0,0,0]
+          ],
+          'O': [
+            [0,1,1,1,0,0,0,0], [1,0,0,0,1,0,0,0], [1,0,0,0,1,0,0,0], [1,0,0,0,1,0,0,0],
+            [1,0,0,0,1,0,0,0], [1,0,0,0,1,0,0,0], [0,1,1,1,0,0,0,0], [0,0,0,0,0,0,0,0]
+          ],
+          'P': [
+            [1,1,1,1,0,0,0,0], [1,0,0,0,1,0,0,0], [1,0,0,0,1,0,0,0], [1,1,1,1,0,0,0,0],
+            [1,0,0,0,0,0,0,0], [1,0,0,0,0,0,0,0], [1,0,0,0,0,0,0,0], [0,0,0,0,0,0,0,0]
+          ],
+          'Q': [
+            [0,1,1,1,0,0,0,0], [1,0,0,0,1,0,0,0], [1,0,0,0,1,0,0,0], [1,0,0,0,1,0,0,0],
+            [1,0,0,1,1,0,0,0], [1,0,0,0,1,0,0,0], [0,1,1,1,1,1,0,0], [0,0,0,0,0,0,0,0]
+          ],
+          'R': [
+            [1,1,1,1,0,0,0,0], [1,0,0,0,1,0,0,0], [1,0,0,0,1,0,0,0], [1,1,1,1,0,0,0,0],
+            [1,0,0,1,0,0,0,0], [1,0,0,0,1,0,0,0], [1,0,0,0,0,1,0,0], [0,0,0,0,0,0,0,0]
+          ],
+          'S': [
+            [0,1,1,1,1,0,0,0], [1,0,0,0,0,0,0,0], [1,0,0,0,0,0,0,0], [0,1,1,1,0,0,0,0],
+            [0,0,0,0,1,0,0,0], [0,0,0,0,0,1,0,0], [1,1,1,1,0,0,0,0], [0,0,0,0,0,0,0,0]
+          ],
+          'T': [
+            [1,1,1,1,1,0,0,0], [0,0,1,0,0,0,0,0], [0,0,1,0,0,0,0,0], [0,0,1,0,0,0,0,0],
+            [0,0,1,0,0,0,0,0], [0,0,1,0,0,0,0,0], [0,0,1,0,0,0,0,0], [0,0,0,0,0,0,0,0]
+          ],
+          'U': [
+            [1,0,0,0,1,0,0,0], [1,0,0,0,1,0,0,0], [1,0,0,0,1,0,0,0], [1,0,0,0,1,0,0,0],
+            [1,0,0,0,1,0,0,0], [1,0,0,0,1,0,0,0], [0,1,1,1,0,0,0,0], [0,0,0,0,0,0,0,0]
+          ],
+          'V': [
+            [1,0,0,0,1,0,0,0], [1,0,0,0,1,0,0,0], [1,0,0,0,1,0,0,0], [0,1,0,1,0,0,0,0],
+            [0,1,0,1,0,0,0,0], [0,0,1,0,0,0,0,0], [0,0,1,0,0,0,0,0], [0,0,0,0,0,0,0,0]
+          ],
+          'W': [
+            [1,0,0,0,1,0,0,0], [1,0,0,0,1,0,0,0], [1,0,0,0,1,0,0,0], [1,0,1,0,1,0,0,0],
+            [1,0,1,0,1,0,0,0], [1,1,0,1,1,0,0,0], [1,0,0,0,1,0,0,0], [0,0,0,0,0,0,0,0]
+          ],
+          'X': [
+            [1,0,0,0,1,0,0,0], [0,1,0,1,0,0,0,0], [0,0,1,0,0,0,0,0], [0,0,1,0,0,0,0,0],
+            [0,0,1,0,0,0,0,0], [0,1,0,1,0,0,0,0], [1,0,0,0,1,0,0,0], [0,0,0,0,0,0,0,0]
+          ],
+          'Y': [
+            [1,0,0,0,1,0,0,0], [0,1,0,1,0,0,0,0], [0,0,1,0,0,0,0,0], [0,0,1,0,0,0,0,0],
+            [0,0,1,0,0,0,0,0], [0,0,1,0,0,0,0,0], [0,0,1,0,0,0,0,0], [0,0,0,0,0,0,0,0]
+          ],
+          'Z': [
+            [1,1,1,1,1,0,0,0], [0,0,0,0,1,0,0,0], [0,0,0,1,0,0,0,0], [0,0,1,0,0,0,0,0],
+            [0,1,0,0,0,0,0,0], [1,0,0,0,0,0,0,0], [1,1,1,1,1,0,0,0], [0,0,0,0,0,0,0,0]
+          ],
+          '!': [
+            [0,0,1,0,0,0,0,0], [0,0,1,0,0,0,0,0], [0,0,1,0,0,0,0,0], [0,0,1,0,0,0,0,0],
+            [0,0,1,0,0,0,0,0], [0,0,0,0,0,0,0,0], [0,0,1,0,0,0,0,0], [0,0,0,0,0,0,0,0]
+          ],
+          '?': [
+            [0,1,1,1,0,0,0,0], [1,0,0,0,1,0,0,0], [0,0,0,0,1,0,0,0], [0,0,0,1,0,0,0,0],
+            [0,0,0,1,0,0,0,0], [0,0,0,0,0,0,0,0], [0,0,1,0,0,0,0,0], [0,0,0,0,0,0,0,0]
+          ],
+          '.': [
+            [0,0,0,0,0,0,0,0], [0,0,0,0,0,0,0,0], [0,0,0,0,0,0,0,0], [0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0], [0,0,0,0,0,0,0,0], [0,0,1,0,0,0,0,0], [0,0,0,0,0,0,0,0]
+          ],
+          ' ': Array.from({length: PATTERN_HEIGHT}, () => Array(SYMBOL_WIDTH).fill(0))
+        };
+
+        function createWordPattern(symbols) {
+          const wordPattern = [];
+          for (let r = 0; r < PATTERN_HEIGHT; r++) {
+            let newRow = [];
+            for (const char of symbols) {
+              const pattern = PATTERNS[char] || PATTERNS[' '];
+              newRow = newRow.concat(pattern[r]);
+            }
+            wordPattern.push(newRow);
+          }
+          return wordPattern;
+        }
+
+        async function playWordBlock(pattern, output) {
+          const currentWidth = pattern[0].length;
+          const currentNoteMap = Array.from({length: currentWidth}, (_, i) => baseNote + i);
+
+          if (currentWidth > 88) {
+              document.getElementById('status-message').textContent = `Word too long! Truncating to 88 notes.`;
+          }
+
+          for (const row of pattern) {
+            for (let i = 0; i < currentWidth; i++) {
+              if (row[i] === 1 && i < 88) {
+                  output.send([0x90, currentNoteMap[i], 0x7f]);
+              }
+            }
+
+            await new Promise(r => setTimeout(r, ROW_DELAY_MS));
+
+            for (let i = 0; i < currentWidth; i++) {
+              if (row[i] === 1 && i < 88) {
+                  output.send([0x80, currentNoteMap[i], 0x00]);
+              }
+            }
+          }
+        }
+
+        let isPlaying = false;
+
+        async function playMessageWordByWord(message) {
+          if (isPlaying) return;
+          isPlaying = true;
+
+          const statusElement = document.getElementById('status-message');
+          statusElement.textContent = "Connecting to MIDI...";
+
+          let access;
+          try {
+              access = await navigator.requestMIDIAccess();
+          } catch (e) {
+              statusElement.textContent = "MIDI access failed. Ensure it's enabled in your browser.";
+              isPlaying = false;
+              return;
+          }
+
+          const outputs = Array.from(access.outputs.values());
+
+          if (!outputs.length) {
+            statusElement.textContent = "No MIDI output found. Connect a virtual MIDI device.";
+            isPlaying = false;
+            return;
+          }
+          const output = outputs[0];
+          statusElement.textContent = `Using MIDI: ${output.name}`;
+
+          const normalizedMessage = message.toUpperCase();
+
+          const blocks = normalizedMessage
+            .split(/\s+/)
+            .filter(block => block.length > 0);
+
+          for (let i = 0; i < blocks.length; i++) {
+            const word = blocks[i];
+            const validChars = Array.from(word).filter(char => PATTERNS[char]);
+
+            if (validChars.length > 0) {
+                statusElement.textContent = `Playing: ${word}`;
+                const wordPattern = createWordPattern(validChars);
+                await playWordBlock(wordPattern, output);
+
+                if (i < blocks.length - 1) {
+                    await new Promise(r => setTimeout(r, WORD_DELAY_MS));
+                }
+            }
+          }
+
+          statusElement.textContent = "Sequence finished.";
+          setTimeout(() => { statusElement.textContent = ""; }, 3000);
+          isPlaying = false;
+        }
+
+        function setupUI() {
+            const inputElement = document.getElementById('message-input');
+            const playButton = document.getElementById('play-button');
+            const container = document.getElementById('draggable-container');
+
+            function triggerPlay() {
+                const message = inputElement.value.trim();
+                if (message && !isPlaying) {
+                    playMessageWordByWord(message);
+                } else if (!message) {
+                    document.getElementById('status-message').textContent = "Please enter a message.";
+                    setTimeout(() => { document.getElementById('status-message').textContent = ""; }, 2000);
+                }
+            }
+
+            playButton.addEventListener('click', triggerPlay);
+            inputElement.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    triggerPlay();
+                }
+            });
+
+            let isDragging = false;
+            let currentX;
+            let currentY;
+            let initialX;
+            let initialY;
+            let xOffset = 0;
+            let yOffset = 0;
+
+            container.addEventListener('mousedown', dragStart);
+            container.addEventListener('mouseup', dragEnd);
+            container.addEventListener('mousemove', drag);
+            container.addEventListener('touchstart', dragStart);
+            container.addEventListener('touchend', dragEnd);
+            container.addEventListener('touchmove', drag);
+
+            function dragStart(e) {
+                if (e.target !== container && e.target !== container.querySelector('h1')) return;
+                
+                initialX = e.clientX || e.touches[0].clientX;
+                initialY = e.clientY || e.touches[0].clientY;
+
+                if (container.style.transform === 'translate(-50%, -50%)') {
+                    const rect = container.getBoundingClientRect();
+                    xOffset = rect.left + rect.width / 2;
+                    yOffset = rect.top + rect.height / 2;
+                }
+
+                container.style.transform = '';
+                isDragging = true;
+            }
+
+            function dragEnd() {
+                initialX = currentX;
+                initialY = currentY;
+                isDragging = false;
+            }
+
+            function drag(e) {
+                if (!isDragging) return;
+                e.preventDefault();
+                
+                currentX = e.clientX || e.touches[0].clientX;
+                currentY = e.clientY || e.touches[0].clientY;
+
+                xOffset = xOffset + currentX - initialX;
+                yOffset = yOffset + currentY - initialY;
+
+                container.style.left = `${xOffset}px`;
+                container.style.top = `${yOffset}px`;
+
+                initialX = currentX;
+                initialY = currentY;
+            }
+        }
+
+        window.onload = setupUI;
+    </script>
+</body>
+</html>

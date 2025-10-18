@@ -1,3 +1,4 @@
+// hunk of junk
 const baseNote = 36;
 const PATTERN_HEIGHT = 8;
 const SYMBOL_WIDTH = 8;
@@ -72,7 +73,9 @@ async function playMessageWordByWord(message) {
   const output = outputs[0];
   statusElement.textContent = `Using MIDI: ${output.name}`;
 
-  const blocks = message
+  const normalizedMessage = message.toUpperCase();
+
+  const blocks = normalizedMessage
     .split(/\s+/)
     .filter(block => block.length > 0);
 

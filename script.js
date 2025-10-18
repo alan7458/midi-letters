@@ -1,144 +1,130 @@
-// hunk of junk
-const baseNote = 36;
-const PATTERN_HEIGHT = 8;
-const SYMBOL_WIDTH = 8;
-const ROW_DELAY_MS = 60;
-const WORD_DELAY_MS = 400;
+import { loadPatterns, playMessageWordByWord, setPlayMode, isPlaying } from './engine.js';
 
-let PATTERNS = {};
-let isPlaying = false;
+let midiAccess = null;
+let availableOutputs = [];
+let selectedOutput = null; 
 
-function createWordPattern(symbols) {
-  const wordPattern = [];
-  for (let r = 0; r < PATTERN_HEIGHT; r++) {
-    let newRow = [];
-    for (const char of symbols) {
-      const pattern = PATTERNS[char] || PATTERNS[' '];
-      newRow = newRow.concat(pattern[r]);
+const STATUS_ELEMENT = document.getElementById('status-message');
+const OUTPUT_SELECT = document.getElementById('midi-output-select');
+const PLAY_BUTTON = document.getElementById('play-button');
+const MESSAGE_INPUT = document.getElementById('message-input');
+const MODE_BUTTON = document.getElementById('mode-button'); 
+
+function enablePlayButton() {
+    if (PLAY_BUTTON) {
+        PLAY_BUTTON.disabled = false;
     }
-    wordPattern.push(newRow);
-  }
-  return wordPattern;
 }
 
-async function playWordBlock(pattern, output) {
-  const currentWidth = pattern[0].length;
-  const currentNoteMap = Array.from({ length: currentWidth }, (_, i) => baseNote + i);
+async function setupMIDI() {
+    if (STATUS_ELEMENT) STATUS_ELEMENT.textContent = "Requesting MIDI access...";
+    try {
+        midiAccess = await navigator.requestMIDIAccess();
 
-  if (currentWidth > 88) {
-    document.getElementById('status-message').textContent = `Word too long! Truncating to 88 notes.`;
-  }
+        midiAccess.onstatechange = handleStateChange;
 
-  for (const row of pattern) {
-    for (let i = 0; i < currentWidth; i++) {
-      if (row[i] === 1 && i < 88) {
-        output.send([0x90, currentNoteMap[i], 0x7f]);
-      }
+        handleStateChange(); 
+
+    } catch (e) {
+        if (STATUS_ELEMENT) STATUS_ELEMENT.textContent = "MIDI access failed. Ensure it's enabled in your browser.";
+        console.error("MIDI Error:", e);
     }
-
-    await new Promise(r => setTimeout(r, ROW_DELAY_MS));
-
-    for (let i = 0; i < currentWidth; i++) {
-      if (row[i] === 1 && i < 88) {
-        output.send([0x80, currentNoteMap[i], 0x00]);
-      }
-    }
-  }
 }
 
-async function playMessageWordByWord(message) {
-  if (isPlaying) return;
-  isPlaying = true;
+function handleStateChange() {
+    if (!OUTPUT_SELECT) return;
 
-  const statusElement = document.getElementById('status-message');
-  statusElement.textContent = "Connecting to MIDI...";
+    OUTPUT_SELECT.innerHTML = ''; 
+    availableOutputs = [];
 
-  let access;
-  try {
-    access = await navigator.requestMIDIAccess();
-  } catch (e) {
-    statusElement.textContent = "MIDI access failed. Ensure it's enabled in your browser.";
-    isPlaying = false;
-    return;
-  }
+    if (!midiAccess) return; 
 
-  const outputs = Array.from(access.outputs.values());
+    const outputs = Array.from(midiAccess.outputs.values());
 
-  if (!outputs.length) {
-    statusElement.textContent = "No MIDI output found. Connect a virtual MIDI device.";
-    isPlaying = false;
-    return;
-  }
+    if (outputs.length === 0) {
+        OUTPUT_SELECT.innerHTML = '<option value="">-- No MIDI Outputs Found --</option>';
+        selectedOutput = null;
+        if (PLAY_BUTTON) PLAY_BUTTON.disabled = true;
 
-  const output = outputs[0];
-  statusElement.textContent = `Using MIDI: ${output.name}`;
-
-  const normalizedMessage = message.toUpperCase();
-
-  const blocks = normalizedMessage
-    .split(/\s+/)
-    .filter(block => block.length > 0);
-
-  for (let i = 0; i < blocks.length; i++) {
-    const word = blocks[i];
-    const validChars = Array.from(word).filter(char => PATTERNS[char]);
-
-    if (validChars.length > 0) {
-      statusElement.textContent = `Playing: ${word}`;
-      const wordPattern = createWordPattern(validChars);
-      await playWordBlock(wordPattern, output);
-
-      if (i < blocks.length - 1) {
-        await new Promise(r => setTimeout(r, WORD_DELAY_MS));
-      }
+        handlePortSelection(); 
+        return;
     }
-  }
 
-  statusElement.textContent = "Sequence finished.";
-  setTimeout(() => { statusElement.textContent = ""; }, 3000);
-  isPlaying = false;
+    outputs.forEach(output => {
+        availableOutputs.push(output);
+        const option = document.createElement('option');
+        option.value = output.id;
+        option.textContent = output.name;
+        OUTPUT_SELECT.appendChild(option);
+    });
+
+    const previousId = selectedOutput ? selectedOutput.id : null;
+    selectedOutput = availableOutputs.find(output => output.id === previousId) || outputs[0];
+    OUTPUT_SELECT.value = selectedOutput.id;
+
+    handlePortSelection(); 
 }
 
-async function setupUI() {
-  const statusElement = document.getElementById('status-message');
-  statusElement.textContent = "Loading patterns data...";
+function handlePortSelection() {
+    if (!OUTPUT_SELECT) return;
 
-  try {
-    const response = await fetch('patterns.json');
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    const selectedId = OUTPUT_SELECT.value;
+    selectedOutput = availableOutputs.find(output => output.id === selectedId);
+
+    if (selectedOutput) {
+        if (STATUS_ELEMENT) STATUS_ELEMENT.textContent = `Selected MIDI Output: ${selectedOutput.name}`;
+        if (PLAY_BUTTON) PLAY_BUTTON.disabled = isPlaying;
+    } else {
+        if (STATUS_ELEMENT) STATUS_ELEMENT.textContent = 'Please select a MIDI port.';
+        if (PLAY_BUTTON) PLAY_BUTTON.disabled = true;
     }
-    const data = await response.json();
-    
-    PATTERNS = data.PATTERNS;
-
-    statusElement.textContent = "Data loaded. Ready to play!";
-    setTimeout(() => { statusElement.textContent = ""; }, 2000);
-
-  } catch (e) {
-    statusElement.textContent = `Error loading patterns: ${e.message}. Cannot run.`;
-    return;
-  }
-  
-  const inputElement = document.getElementById('message-input');
-  const playButton = document.getElementById('play-button');
-  
-  function triggerPlay() {
-    const message = inputElement.value.trim();
-    if (message && !isPlaying) {
-      playMessageWordByWord(message);
-    } else if (!message) {
-      document.getElementById('status-message').textContent = "Please enter a message.";
-      setTimeout(() => { document.getElementById('status-message').textContent = ""; }, 2000);
-    }
-  }
-
-  playButton.addEventListener('click', triggerPlay);
-  inputElement.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      triggerPlay();
-    }
-  });
 }
 
-window.onload = setupUI;
+function handlePlayClick() {
+    if (!selectedOutput) {
+        if (STATUS_ELEMENT) STATUS_ELEMENT.textContent = "Error: Please select a valid MIDI output port.";
+        return;
+    }
+    const message = MESSAGE_INPUT.value;
+
+    if (PLAY_BUTTON) {
+        PLAY_BUTTON.disabled = true;
+    }
+
+    playMessageWordByWord(message, selectedOutput, enablePlayButton); 
+}
+
+function handleModeToggle() {
+    if (!MODE_BUTTON) return;
+    const currentMode = MODE_BUTTON.getAttribute('data-mode');
+    const newMode = currentMode === 'percussive' ? 'holding' : 'percussive';
+
+    setPlayMode(newMode);
+    MODE_BUTTON.setAttribute('data-mode', newMode);
+    MODE_BUTTON.textContent = `Mode: ${newMode.charAt(0).toUpperCase() + newMode.slice(1)}`;
+}
+
+window.addEventListener('load', async () => {
+
+    const patternsLoaded = await loadPatterns(STATUS_ELEMENT);
+
+    if (patternsLoaded) {
+        await setupMIDI();
+
+        OUTPUT_SELECT.addEventListener('change', handlePortSelection);
+        if (PLAY_BUTTON) PLAY_BUTTON.addEventListener('click', handlePlayClick);
+        if (MODE_BUTTON) MODE_BUTTON.addEventListener('click', handleModeToggle);
+
+        if (MESSAGE_INPUT) {
+            MESSAGE_INPUT.addEventListener('keypress', (event) => {
+
+                if (event.key === 'Enter') {
+                    event.preventDefault(); 
+                    handlePlayClick();
+                }
+            });
+        }
+
+        handleModeToggle();
+    }
+});

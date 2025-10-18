@@ -1,15 +1,30 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MIDI Word Player</title>
-    <link rel="stylesheet" href="style.css">
+    <title>MIDI Printer</title>
 </head>
+
 <body>
 
     <div id="container">
-        <h1>MIDI Word Player</h1>
+        <h1>MIDI Printer</h1>
+        <p>Written by Alan. Source: <a
+                href="https://github.com/alan7458/midi-letters">https://github.com/alan7458/midi-letters</a></p>
+        <div class="info-box">
+            <p>Note: This requires a MIDI-enabled browser and a virtual MIDI loopback device (like loopMIDI or a
+                synthesizer app) to hear audio.</p>
+        </div>
+
+        <hr>
+
+        <label for="midi-output-select">Select MIDI Port:</label>
+        <select id="midi-output-select">
+            <option value="">Loading MIDI...</option>
+        </select>
+
         <p>
             Type a message (letters A-Z, !, ?, .) and press Enter.
         </p>
@@ -18,15 +33,14 @@
             <button id="play-button">
                 Enter
             </button>
+            <button id="mode-button" data-mode="percussive">Mode: Percussive</button>
         </div>
+
         <p id="status-message"></p>
-        <p>written by bmp7458</p>
     </div>
 
-    <div class="info-box">
-        <p>Note: This requires a MIDI-enabled browser and a virtual MIDI loopback device (like loopMIDI or a synthesizer app) to hear audio.</p>
-    </div>
-
-    <script src="script.js"></script>
+    <script type="module" src="engine.js"></script>
+    <script type="module" src="script.js"></script>
 </body>
+
 </html>

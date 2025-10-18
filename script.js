@@ -1,4 +1,3 @@
-// hunk of junk
 const baseNote = 36;
 const PATTERN_HEIGHT = 8;
 const SYMBOL_WIDTH = 8;
@@ -73,9 +72,7 @@ async function playMessageWordByWord(message) {
   const output = outputs[0];
   statusElement.textContent = `Using MIDI: ${output.name}`;
 
-  const normalizedMessage = message.toUpperCase();
-
-  const blocks = normalizedMessage
+  const blocks = message
     .split(/\s+/)
     .filter(block => block.length > 0);
 
@@ -110,7 +107,6 @@ async function setupUI() {
     }
     const data = await response.json();
     
-    // Assign the PATTERNS object from the loaded JSON data
     PATTERNS = data.PATTERNS;
 
     statusElement.textContent = "Data loaded. Ready to play!";
